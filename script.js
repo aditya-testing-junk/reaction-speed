@@ -87,47 +87,51 @@ function nextRound() {
 function showCue() {
   if (!awaitingCue) return;
   cueShown = true;
-  cueStartTime = performance.now();
+
   if (mode === 'simple') {
-    let type = '';
     let cueType = '';
-if (enableVisual && enableAudio) {
-  // Randomly pick one for this round
-  if (Math.random() < 0.5) {
-    cueType = 'Audio';
-  } else {
-    cueType = 'Visual';
-  }
-} else if (enableAudio) {
-  cueType = 'Audio';
-} else if (enableVisual) {
-  cueType = 'Visual';
-}
-cueTypeList.push(cueType);
+    if (enableVisual && enableAudio) {
+      cueType = Math.random() < 0.5 ? 'Audio' : 'Visual';
+    } else if (enableAudio) {
+      cueType = 'Audio';
+    } else if (enableVisual) {
+      cueType = 'Visual';
+    }
+    cueTypeList.push(cueType);
 
-if (cueType === 'Visual') {
-  cueBox.classList.add('active');
-  cueBox.textContent = 'PRESS!';
-  cueBox.style.color = '#ffe066';
-}
-if (cueType === 'Audio') {
-  audioBeep.currentTime = 0;
-  audioBeep.play();
-}
-
-    cueBox.style.cursor = 'pointer';
-
-    // Input listeners
-    window.onkeydown = (e) => {
-      if (e.code === 'Space' && cueShown) registerReaction();
-    };
-    cueBox.ontouchstart = (e) => {
-      if (cueShown) registerReaction();
-    };
+    if (cueType === 'Visual') {
+      cueBox.classList.add('active');
+      cueBox.textContent = 'PRESS!';
+      cueBox.style.color = '#ffe066';
+      cueStartTime = performance.now(); // Visual cue is instant
+      cueBox.style.cursor = 'pointer';
+      // Input listeners
+      window.onkeydown = (e) => {
+        if (e.code === 'Space' && cueShown) registerReaction();
+      };
+      cueBox.ontouchstart = (e) => {
+        if (cueShown) registerReaction();
+      };
+    } else if (cueType === 'Audio') {
+      // Preload and reset audio
+      audioBeep.currentTime = 0;
+      // Wait for the sound to actually start playing
+      audioBeep.onplaying = () => {
+        cueStartTime = performance.now(); // Start timer exactly when audio starts
+        audioBeep.onplaying = null; // Remove handler
+      };
+      audioBeep.play();
+      cueBox.style.cursor = 'pointer';
+      window.onkeydown = (e) => {
+        if (e.code === 'Space' && cueShown) registerReaction();
+      };
+      cueBox.ontouchstart = (e) => {
+        if (cueShown) registerReaction();
+      };
+    }
   } else {
     // Hard mode
     if (isMobile()) {
-      // Yellow dot at random spot
       cueTypeList.push('Yellow Dot');
       cueBox.innerHTML = '';
       let dot = document.createElement('div');
@@ -140,8 +144,8 @@ if (cueType === 'Audio') {
       dot.style.position = 'absolute';
       dot.ontouchstart = registerReaction;
       cueBox.appendChild(dot);
+      cueStartTime = performance.now();
     } else {
-      // Random alphabet
       hardAlphabet = String.fromCharCode(65 + Math.floor(Math.random() * 26));
       cueTypeList.push(`Key: ${hardAlphabet}`);
       cueBox.textContent = hardAlphabet;
@@ -149,12 +153,15 @@ if (cueType === 'Audio') {
       window.onkeydown = (e) => {
         if (cueShown && e.key.toUpperCase() === hardAlphabet) registerReaction();
       };
+      cueStartTime = performance.now();
     }
   }
 }
 
 function registerReaction() {
   if (!cueShown) return;
+  // If cueStartTime is not set (e.g., user pressed before audio started), ignore
+  if (!cueStartTime) return;
   let reaction = Math.round(performance.now() - cueStartTime);
   reactionTimes.push(reaction);
   cueShown = false;
@@ -166,6 +173,7 @@ function registerReaction() {
   cueBox.style.cursor = 'default';
   window.onkeydown = null;
   cueBox.ontouchstart = null;
+  cueStartTime = 0;
   setTimeout(() => {
     currentRound++;
     if (currentRound < rounds) {
@@ -179,6 +187,7 @@ function registerReaction() {
 function earlyInput() {
   awaitingCue = false;
   cueShown = false;
+  cueStartTime = 0;
   info.textContent = 'Too soon! Wait for the cue.';
   cueBox.className = 'cue';
   cueBox.textContent = '';
@@ -224,10 +233,14 @@ function isMobile() {
   return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
-// --- On Load: Show Highscores if present ---
+// --- On Load: Show Highscores if present, Preload Audio ---
 window.onload = function() {
   if (highscoreSimple)
     highscoreDisplay.innerHTML = `<b>High Score (Simple):</b> <span class="highscore">${highscoreSimple} ms</span>`;
   if (highscoreHard)
     highscoreDisplay.innerHTML += `<br><b>High Score (Hard):</b> <span class="highscore">${highscoreHard} ms</span>`;
+  // Preload audio
+  if (audioBeep) {
+    audioBeep.load();
+  }
 };
